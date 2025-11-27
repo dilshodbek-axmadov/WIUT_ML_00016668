@@ -28,11 +28,11 @@ A machine learning model that predicts **hourly westbound traffic volume on I-94
 ### Run locally in Jupyter Notebook
 If you want to run or explore the model locally, you should install the libraries in the requirements.txt file
 But also, I write them in here:
-Pandas
-Numpy
-Maplotlib
-Seaborn
-Scikit-learn
-XGBoost
-CatBoost
-Gradio
+1. Pandas
+2. Numpy
+3. Maplotlib
+4. Seaborn
+5. Scikit-learn
+6. XGBoost
+7. CatBoost
+8. Gradio
