@@ -1,0 +1,21 @@
+name: Deploy to Hugging Face Space
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Push to HF Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git remote add space https://dilshod-axmadov:$HF_TOKEN@huggingface.co/spaces/dilshod-axmadov/i94-traffic-predictor || true
+          git push --force space main
+
+      - name: Done
+        run: echo "Deployed → https://huggingface.co/spaces/dilshod-axmadov/i94-traffic-predictor"
