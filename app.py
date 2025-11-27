@@ -1,74 +1,78 @@
-import streamlit as st 
+# app.py — CORRECT Gradio 4+ version (works locally + Hugging Face)
+import gradio as gr
 import joblib
 import pandas as pd
 from datetime import datetime
 
-# Loading the model
-@st.cache_resource
-def load_model():
-    return joblib.load('traffic_model.pkl')
+# Load model
+model_data = joblib.load("traffic_model.pkl")
+preprocessor = model_data["preprocessor"]
+model = model_data["model"]
 
-model_data = load_model()
-preprocessor = model_data['preprocessor']
-model = model_data['model']
+def predict_traffic(date_str, time_str, temp_c, rain_1h, snow_1h, clouds_all, weather_main, holiday):
+    try:
+        # Parse date and time from strings
+        date = pd.to_datetime(date_str)
+        time = pd.to_datetime(time_str).time()
+        date_time = pd.Timestamp.combine(date.date(), time)
+        
+        # Create input DataFrame
+        input_data = pd.DataFrame({
+            'holiday':       [holiday],
+            'rain_1h':       [rain_1h],
+            'snow_1h':       [snow_1h],
+            'clouds_all':    [clouds_all / 100.0],
+            'weather_main':  [weather_main],
+            'month':         [date_time.month],
+            'day_of_week':   [date_time.weekday()],
+            'is_weekend':    [1 if date_time.weekday() >= 5 else 0],
+            'hour':          [date_time.hour],
+            'temp_c':        [temp_c]
+        })
+        
+        X = preprocessor.transform(input_data)
+        prediction = int(model.predict(X)[0])
+        return f"**{prediction:,} vehicles per hour** on I-94 westbound"
+        
+    except Exception as e:
+        return f"Error: {str(e)}"
 
-st.title("Metro Interstate Traffic Volume Predictor")
-st.write("Enter weather and time details to predict hourly westbound traffic on I-94")
+# Gradio interface — works with Gradio 4+
+with gr.Blocks(title="I-94 Traffic Predictor") as demo:
+    gr.Markdown("# Metro Interstate Traffic Volume Predictor")
+    gr.Markdown("Enter date, time, and weather → get instant traffic prediction")
 
-# user inputs (based on the raw data)
-col1, col2 = st.columns(2)
+    with gr.Row():
+        with gr.Column():
+            date_str = gr.Textbox(label="Date (YYYY-MM-DD)", value=datetime.today().strftime("%Y-%m-%d"))
+            time_str = gr.Textbox(label="Time (HH:MM)", value="12:00")
+            temp_c = gr.Slider(-30, 37, value=20, step=0.5, label="Temperature (°C)")
+            rain_1h = gr.Slider(0, 56, value=0, step=0.1, label="Rain last hour (mm)")
+            snow_1h = gr.Slider(0, 0.51, value=0, step=0.01, label="Snow last hour (mm)")
 
-with col1:
-    date = st.date_input("Date", value=datetime.today())
-    time = st.time_input("Time", value="12:00", step=60*15)
-    temp_c = st.number_input("Temperature (°C)", min_value=-30.0, max_value=37.0, value=20.0)
-    rain_1h = st.number_input("Rain in the last hour (mm)", min_value=0.0, max_value=56.0, step=0.1)
-    snow_1h = st.number_input("Snow in the last hour (mm)", min_value=0.0, max_value=0.51, value=0.0, step=0.01)
+        with gr.Column():
+            clouds_all = gr.Slider(0, 100, value=50, step=1, label="Cloud cover (%)")
+            weather_main = gr.Dropdown(
+                choices=['Clouds', 'Clear', 'Rain', 'Drizzle', 'Mist', 'Haze', 'Fog',
+                         'Thunderstorm', 'Snow', 'Squall', 'Smoke'],
+                value='Clouds', label="Weather Condition"
+            )
+            holiday = gr.Dropdown(
+                choices=['No Holiday', 'Columbus Day', 'Veterans Day', 'Thanksgiving Day',
+                         'Christmas Day', 'New Years Day', 'Washingtons Birthday',
+                         'Memorial Day', 'Independence Day', 'State Fair', 'Labor Day',
+                         'Martin Luther King Jr Day'],
+                value='No Holiday', label="Holiday"
+            )
 
-with col2:
-    clouds_all = st.slider("Cloud cover (%)", min_value=0, max_value=100, value=50)
-    weather_main = st.selectbox("Weather Condition", 
-                                ['Clouds', 'Clear', 'Rain', 'Drizzle', 'Mist', 'Haze', 'Fog',
-       'Thunderstorm', 'Snow', 'Squall', 'Smoke'])
-    holiday = st.selectbox("Holiday",
-                           ['No Holiday', 'Columbus Day', 'Veterans Day', 'Thanksgiving Day',
-       'Christmas Day', 'New Years Day', 'Washingtons Birthday',
-       'Memorial Day', 'Independence Day', 'State Fair', 'Labor Day',
-       'Martin Luther King Jr Day'])
-    
-# Predict button
-if st.button("Predict Traffic Volume"):
-    # combine date + time into datetime
-    date_time = pd.Timestamp.combine(date, time)
+    btn = gr.Button("Predict Traffic Volume", variant="primary")
+    output = gr.Markdown()
 
-    is_weekend = 1 if date_time.day_of_week>=5 else 0
-    # Creating DataFrame matching training features
-    input_data = pd.DataFrame({
-        'holiday':[holiday],
-        'rain_1h':[rain_1h],
-        'snow_1h':[snow_1h],
-        'clouds_all':[clouds_all/100.0],
-        'weather_main':[weather_main],
-        'month':[date_time.month],
-        'day_of_week':[date_time.day_of_week],
-        'is_weekend': [is_weekend],
-        'hour':[date_time.hour],
-        'temp_c':[temp_c]
-    })
+    btn.click(
+        fn=predict_traffic,
+        inputs=[date_str, time_str, temp_c, rain_1h, snow_1h, clouds_all, weather_main, holiday],
+        outputs=output
+    )
 
-    # Applying preprocessing
-    X_processed = preprocessor.transform(input_data)
-
-    # Predict the output
-    prediction = model.predict(X_processed)[0]
-
-    st.success(f"Predicted Traffic Volume: **{int(prediction):,} vehicles per hour**")
-
-def validate_inputs():
-    if rain_1h<0 or snow_1h < 0:
-        st.error("Rain and snow cannot be negative.")
-        return False
-    return True
-
-if not validate_inputs():
-    st.stop()
+if __name__ == "__main__":
+    demo.launch()
